@@ -189,9 +189,7 @@ std::pair<double, int> HLL::RawEstimate() const {
     if (registers_[i] == 0) {
       ++zeroed_registers;
     }
-    const double max = static_cast<double>(registers_[i]);
-    const double term = pow(2.0, -max);
-    sum += term;
+    sum += pow(2.0, -static_cast<double>(registers_[i]));
   }
 
   // Next, calculate the harmonic mean
@@ -229,7 +227,7 @@ std::pair<double, int> HLL::RawEstimateUnion(const HLL* other) const {
   __m256d sum_packed = _mm256_setzero_pd();
   for (; i + 4 <= register_count_; i += 4) {
     // Load 4 8-bit registers and sign-extend them to 32-bit
-    __m128i pack = _mm256_castsi256_si128(_mm256_cvtepi8_epi32(_mm_max_epi32(
+    __m128i pack = _mm256_castsi256_si128(_mm256_cvtepi8_epi32(_mm_max_epu8(
         _mm_set1_epi32(*reinterpret_cast<const uint32_t*>(&registers_[i])),
         _mm_set1_epi32(
             *reinterpret_cast<const uint32_t*>(&other->registers_[i])))));
@@ -253,10 +251,7 @@ std::pair<double, int> HLL::RawEstimateUnion(const HLL* other) const {
     if (registers_[i] == 0 && other->registers_[i] == 0) {
       ++zeroed_registers;
     }
-    const double max = std::max(static_cast<double>(registers_[i]),
-                                static_cast<double>(other->registers_[i]));
-    const double term = pow(2.0, -max);
-    sum += term;
+    sum += pow(2.0, -static_cast<double>(std::max(registers_[i], other->registers_[i])));
   }
 
   // Next, calculate the harmonic mean
