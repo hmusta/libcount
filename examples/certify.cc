@@ -53,14 +53,14 @@ struct TestResults {
   int precision;
   uint64_t size;
   uint64_t cardinality;
-  uint64_t estimate;
+  double estimate;
   double percent_error;
 };
 
 std::ostream& operator<<(std::ostream& os, const TestResults& results) {
   char buffer[1000];
   snprintf(buffer, sizeof(buffer),
-           "Precision:%2d  Size:%8lu  Actual:%8lu  Estimate:%8lu,  Error: "
+           "Precision:%2d  Size:%8lu  Actual:%8lu  Estimate:%10.1lf,  Error: "
            "%7.2lf %%",
            results.precision, results.size, results.cardinality,
            results.estimate, results.percent_error);
@@ -104,7 +104,7 @@ int certify(int precision, uint64_t size, uint64_t cardinality,
 
   // Calculate percentage difference.
   const double actual = static_cast<double>(results->cardinality);
-  const double estimated = static_cast<double>(results->estimate);
+  const double estimated = results->estimate;
   const double percent = ((estimated - actual) / actual) * 100.0;
 
   // Report percentage error.

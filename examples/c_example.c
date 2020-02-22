@@ -52,11 +52,11 @@ int main(int argc, char* argv[]) {
   }
 
   // Obtain the cardinality estimate.
-  const uint64_t estimate = HLL_estimate(hll);
+  const double estimate = HLL_estimate(hll);
 
   // Display results.
   printf("actual cardinality:    %" PRIuFAST64 "\n", kTrueCardinality);
-  printf("estimated cardinality: %" PRIuFAST64 "\n", estimate);
+  printf("estimated cardinality: %f\n", estimate);
 
   // Free object.
   HLL_free(hll);

@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Obtain the cardinality estimate.
-  const uint64_t estimate = hll->Estimate();
+  const double estimate = hll->Estimate();
 
   // Display results.
   cout << "actual cardinality:    " << kTrueCardinality << endl;

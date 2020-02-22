@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
   hll_1->Merge(hll_2);
 
   // Obtain the cardinality estimate.
-  const uint64_t estimate = hll_1->Estimate();
+  const double estimate = hll_1->Estimate();
 
   // Display results.
   cout << "actual cardinality:    " << (kTrueCardinality * 2) << endl;

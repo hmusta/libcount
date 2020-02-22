@@ -41,7 +41,7 @@ extern void HLL_update(hll_t* ctx, uint64_t hash);
 extern int HLL_merge(hll_t* dest, const hll_t* src);
 
 /* Return an estimate of the cardinality of the set using HyperLogLog++ */
-extern uint64_t HLL_estimate(hll_t* ctx);
+extern double HLL_estimate(hll_t* ctx);
 
 /* Free resources associated with a context. */
 extern void HLL_free(hll_t* ctx);

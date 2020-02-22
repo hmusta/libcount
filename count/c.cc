@@ -62,7 +62,7 @@ int HLL_merge(hll_t* dest, const hll_t* src) {
   return dest->rep->Merge(src->rep);
 }
 
-uint64_t HLL_estimate(hll_t* ctx) {
+double HLL_estimate(hll_t* ctx) {
   assert(ctx != NULL);
   return ctx->rep->Estimate();
 }

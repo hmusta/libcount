@@ -44,7 +44,7 @@ class HLL {
   int Merge(const HLL* other);
 
   // Compute the bias-corrected estimate using the HyperLogLog++ algorithm.
-  uint64_t Estimate() const;
+  double Estimate() const;
 
   // Getters
   int get_precision() const { return precision_; }
