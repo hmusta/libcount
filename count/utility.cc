@@ -14,11 +14,15 @@
 // contributors.
 
 #include "count/utility.h"
+
 #include <math.h>
 
 namespace libcount {
 
 uint8_t CountLeadingZeroes(uint64_t x) {
+#if (defined(__GNUC__) || defined(__clang__))
+  return __builtin_clzll(x);
+#else
   uint64_t y = 0;
   uint64_t n = 64;
   y = x >> 32;
@@ -51,6 +55,7 @@ uint8_t CountLeadingZeroes(uint64_t x) {
     return static_cast<uint8_t>(n - 2);
   }
   return static_cast<uint8_t>(n - x);
+#endif
 }
 
 bool IsDoubleEqual(double a, double b, double epsilon) {
