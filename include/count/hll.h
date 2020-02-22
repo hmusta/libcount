@@ -17,6 +17,7 @@
 #define INCLUDE_COUNT_HLL_H_
 
 #include <stdint.h>
+
 #include "count/hll_limits.h"
 
 namespace libcount {
@@ -44,6 +45,14 @@ class HLL {
 
   // Compute the bias-corrected estimate using the HyperLogLog++ algorithm.
   uint64_t Estimate() const;
+
+  // Getters
+  int get_precision() const { return precision_; }
+  int get_register_count() const { return register_count_; }
+
+  // Access underlying register array
+  const uint8_t* data() const { return registers_; }
+  uint8_t* data() { return registers_; }
 
  private:
   // No copying allowed
