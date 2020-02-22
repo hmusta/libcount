@@ -41,7 +41,7 @@ class HLL {
   void Update(uint64_t hash);
 
   // Add an array of hashes
-  void Update(uint64_t* hashes, uint64_t len);
+  void Update(const uint64_t* hashes, uint64_t len);
 
   // Merge count tracking information from another instance into the object.
   // The object being merged in must have been instantiated with the same

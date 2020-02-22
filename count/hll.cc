@@ -118,7 +118,7 @@ void HLL::Update(uint64_t hash) {
   registers_[index] = max(registers_[index], count);
 }
 
-void HLL::Update(uint64_t* hashes, uint64_t len) {
+void HLL::Update(const uint64_t* hashes, uint64_t len) {
   // TODO: is this worth rewriting with SIMD instructions?
   for (uint64_t i = 0; i < len; ++i) {
     Update(hashes[i]);
