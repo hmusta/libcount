@@ -40,6 +40,9 @@ class HLL {
   // cryptographic hash function such as SHA1, is a good choice.
   void Update(uint64_t hash);
 
+  // Add an array of hashes
+  void Update(uint64_t* hashes, uint64_t len);
+
   // Merge count tracking information from another instance into the object.
   // The object being merged in must have been instantiated with the same
   // precision. Returns 0 on success, EINVAL otherwise.

@@ -14,12 +14,15 @@
 // contributors.
 
 #include "count/hll.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <algorithm>
+
 #include "count/empirical_data.h"
 #include "count/utility.h"
 
@@ -87,8 +90,12 @@ void HLL::Update(uint64_t hash) {
   assert(count <= 64);
 
   // Update the appropriate register if the new count is greater than current.
-  if (count > registers_[index]) {
-    registers_[index] = count;
+  registers_[index] = max(registers_[index], count);
+}
+
+void HLL::Update(uint64_t* hashes, uint64_t len) {
+  for (uint64_t i = 0; i < len; ++i) {
+    Update(hashes[i]);
   }
 }
 
@@ -147,16 +154,18 @@ double HLL::Estimate() const {
   // implemented at this time. It is correct, but seems a little awkward.
   // Have someone else review this.
 
-  // First, calculate the raw estimate and number of zerod registers per original
-  // HyperLogLog. The number of zeroed registers decides whether we use LinearCounting.
+  // First, calculate the raw estimate and number of zerod registers per
+  // original HyperLogLog. The number of zeroed registers decides whether we use
+  // LinearCounting.
   const std::pair<double, int> EV = RawEstimate();
 
   // Determine the threshold under which we apply a bias correction.
   const double BiasThreshold = 5 * register_count_;
 
   // Calculate E', the bias corrected estimate.
-  const double EP =
-      (EV.first < BiasThreshold) ? (EV.first - EmpiricalBias(EV.first, precision_)) : EV.first;
+  const double EP = (EV.first < BiasThreshold)
+                        ? (EV.first - EmpiricalBias(EV.first, precision_))
+                        : EV.first;
 
   // H is either the LinearCounting estimate or the bias-corrected estimate.
   double H = 0.0;

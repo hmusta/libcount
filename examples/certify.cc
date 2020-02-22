@@ -19,7 +19,9 @@
 #include <openssl/sha.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <iostream>
+
 #include "count/hll.h"
 #include "count/hll_limits.h"
 
@@ -28,8 +30,8 @@ using std::cout;
 using std::endl;
 
 using libcount::HLL;
-using libcount::HLL_MIN_PRECISION;
 using libcount::HLL_MAX_PRECISION;
+using libcount::HLL_MIN_PRECISION;
 
 // Hash function that hashes an integer to uint64_t, using 64 bits of SHA-1.
 uint64_t hash(int i) {
@@ -95,9 +97,14 @@ int certify(int precision, uint64_t size, uint64_t cardinality,
 
   // Push 'size' elements through the counter. We are guaranteed exactly
   // 'cardinality' unique hash values.
-  for (uint64_t i = 0; i < size; ++i) {
-    hll->Update(hash(i % cardinality));
+  hll->Update(hash(0));
+
+  uint64_t* values = new uint64_t[size - 1];
+  for (uint64_t i = 1; i < size; ++i) {
+    values[i - 1] = hash(i % cardinality);
   }
+
+  hll->Update(values, size - 1);
 
   // Calculate the estimate
   results->estimate = hll->Estimate();
@@ -112,6 +119,7 @@ int certify(int precision, uint64_t size, uint64_t cardinality,
 
   // Cleanup.
   delete hll;
+  delete values;
 
   return 0;
 }
