@@ -18,6 +18,8 @@
 
 #include <stdint.h>
 
+#include <utility>
+
 #include "count/hll_limits.h"
 
 namespace libcount {
@@ -62,11 +64,10 @@ class HLL {
   // Constructor is private: we validate the precision in the Create function.
   explicit HLL(int precision);
 
-  // Compute the raw estimate based on the HyperLogLog algorithm.
-  double RawEstimate() const;
-
-  // Return the number of registers equal to zero; used in LinearCounting.
-  int RegistersEqualToZero() const;
+  // Compute the raw estimate and number of zero registers based on the
+  // HyperLogLog algorithm. The number of zeroed registers decides whether we
+  // use LinearCounting.
+  std::pair<double, int> RawEstimate() const;
 
   int precision_;
   int register_count_;

@@ -112,7 +112,7 @@ int HLL::Merge(const HLL* other) {
   return 0;
 }
 
-double HLL::RawEstimate() const {
+std::pair<double, int> HLL::RawEstimate() const {
   // Let 'm' be the number of registers.
   const double m = static_cast<double>(register_count_);
 
@@ -120,7 +120,11 @@ double HLL::RawEstimate() const {
   // Let 'term' be the reciprocal of 2 ^ max.
   // Finally, let 'sum' be the sum of all terms.
   double sum = 0.0;
+  int zeroed_registers = 0;
   for (int i = 0; i < register_count_; ++i) {
+    if (registers_[i] == 0) {
+      ++zeroed_registers;
+    }
     const double max = static_cast<double>(registers_[i]);
     const double term = pow(2.0, -max);
     sum += term;
@@ -134,7 +138,7 @@ double HLL::RawEstimate() const {
   const double estimate = EmpiricalAlpha(precision_) * m * harmonic_mean;
   assert(estimate >= 0.0);
 
-  return estimate;
+  return std::make_pair(estimate, zeroed_registers);
 }
 
 double HLL::Estimate() const {
@@ -143,23 +147,21 @@ double HLL::Estimate() const {
   // implemented at this time. It is correct, but seems a little awkward.
   // Have someone else review this.
 
-  // First, calculate the raw estimate per original HyperLogLog.
-  const double E = RawEstimate();
+  // First, calculate the raw estimate and number of zerod registers per original
+  // HyperLogLog. The number of zeroed registers decides whether we use LinearCounting.
+  const std::pair<double, int> EV = RawEstimate();
 
   // Determine the threshold under which we apply a bias correction.
   const double BiasThreshold = 5 * register_count_;
 
   // Calculate E', the bias corrected estimate.
   const double EP =
-      (E < BiasThreshold) ? (E - EmpiricalBias(E, precision_)) : E;
-
-  // The number of zeroed registers decides whether we use LinearCounting.
-  const int V = RegistersEqualToZero();
+      (EV.first < BiasThreshold) ? (EV.first - EmpiricalBias(EV.first, precision_)) : EV.first;
 
   // H is either the LinearCounting estimate or the bias-corrected estimate.
   double H = 0.0;
-  if (V != 0) {
-    H = LinearCounting(register_count_, V);
+  if (EV.second != 0) {
+    H = LinearCounting(register_count_, EV.second);
   } else {
     H = EP;
   }
@@ -170,16 +172,6 @@ double HLL::Estimate() const {
   } else {
     return EP;
   }
-}
-
-int HLL::RegistersEqualToZero() const {
-  int zeroed_registers = 0;
-  for (int i = 0; i < register_count_; ++i) {
-    if (registers_[i] == 0) {
-      ++zeroed_registers;
-    }
-  }
-  return zeroed_registers;
 }
 
 }  // namespace libcount
