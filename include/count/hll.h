@@ -51,6 +51,10 @@ class HLL {
   // Compute the bias-corrected estimate using the HyperLogLog++ algorithm.
   double Estimate() const;
 
+  // Compute the bias-corrected estimate of the union using the HyperLogLog++
+  // algorithm.
+  double EstimateUnion(const HLL* other) const;
+
   // Getters
   int get_precision() const { return precision_; }
   int get_register_count() const { return register_count_; }
@@ -71,6 +75,8 @@ class HLL {
   // HyperLogLog algorithm. The number of zeroed registers decides whether we
   // use LinearCounting.
   std::pair<double, int> RawEstimate() const;
+  std::pair<double, int> RawEstimateUnion(const HLL* other) const;
+  double CorrectEstimate(const std::pair<double, int>& EV) const;
 
   int precision_;
   int register_count_;

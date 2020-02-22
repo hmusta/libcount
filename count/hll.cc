@@ -21,6 +21,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if __AVX2__
+#include <immintrin.h>
+#endif
+
 #include <algorithm>
 
 #include "count/empirical_data.h"
@@ -50,6 +54,26 @@ inline uint8_t ZeroCountOf(uint64_t hash, int precision) {
   // Count zeroes, less the index bits we're masking off.
   return (CountLeadingZeroes(hash & mask) - static_cast<uint8_t>(precision));
 }
+
+#if __AVX2__
+
+inline double haddall_pd(__m256d v) {
+  // [ a, b, c, d ] -> [ a+b, 0, c+d, 0]
+  __m256d pairs = _mm256_hadd_pd(v, _mm256_setzero_pd());
+
+  // [ a+b, 0, c+d, 0] + [ c+d, 0, 0, 0] -> a+b+c+d
+  return _mm256_cvtsd_f64(
+      _mm256_add_pd(pairs, _mm256_permute4x64_pd(pairs, 0x56)));
+}
+
+inline uint64_t haddall_epi32(__m128i v) {
+  // [ a, b, c, d ] -> [ a+b, c+d, c+d, a+b ]
+  __m128i pairs = _mm_hadd_epi32(v, _mm_shuffle_epi32(v, 0xE));
+
+  return _mm_extract_epi32(_mm_add_epi32(pairs, pairs), 0);
+}
+
+#endif
 
 }  // namespace
 
@@ -81,6 +105,7 @@ HLL* HLL::Create(int precision, int* error) {
 }
 
 void HLL::Update(uint64_t hash) {
+  // TODO: is this worth rewriting with SIMD instructions?
   // Which register will potentially receive the zero count of this hash?
   const int index = RegisterIndexOf(hash, precision_);
   assert(index < register_count_);
@@ -94,6 +119,7 @@ void HLL::Update(uint64_t hash) {
 }
 
 void HLL::Update(uint64_t* hashes, uint64_t len) {
+  // TODO: is this worth rewriting with SIMD instructions?
   for (uint64_t i = 0; i < len; ++i) {
     Update(hashes[i]);
   }
@@ -112,6 +138,7 @@ int HLL::Merge(const HLL* other) {
 
   // Choose the maximum of corresponding registers from self, other and
   // store it back in self, effectively merging the state of the counters.
+  // TODO: is this worth rewriting with SIMD instructions?
   for (int i = 0; i < register_count_; ++i) {
     registers_[i] = max(registers_[i], other->registers_[i]);
   }
@@ -128,7 +155,37 @@ std::pair<double, int> HLL::RawEstimate() const {
   // Finally, let 'sum' be the sum of all terms.
   double sum = 0.0;
   int zeroed_registers = 0;
-  for (int i = 0; i < register_count_; ++i) {
+  int i = 0;
+
+#if __AVX2__
+
+  static_assert(HLL_MAX_PRECISION < 32);
+
+  __m128i zero_counts = _mm_setzero_si128();
+  __m128i ones = _mm_set1_epi32(1);
+  __m256d ones_pd = _mm256_set1_pd(1.0);
+  __m256d sum_packed = _mm256_setzero_pd();
+  for (; i + 4 <= register_count_; i += 4) {
+    // Load 4 8-bit registers and sign-extend them to 32-bit
+    __m128i pack = _mm256_castsi256_si128(_mm256_cvtepi8_epi32(
+        _mm_set1_epi32(*reinterpret_cast<const uint32_t*>(&registers_[i]))));
+
+    // Add zero counts
+    zero_counts =
+        _mm_add_epi32(zero_counts, _mm_cmpeq_epi32(pack, _mm_setzero_si128()));
+
+    // Convert to packed doubles
+    __m256d exps_pd = _mm256_cvtepi32_pd(_mm_sllv_epi32(ones, pack));
+
+    sum_packed = _mm256_add_pd(sum_packed, _mm256_div_pd(ones_pd, exps_pd));
+  }
+
+  sum += haddall_pd(sum_packed);
+  zeroed_registers += haddall_epi32(zero_counts);
+
+#endif
+
+  for (; i < register_count_; ++i) {
     if (registers_[i] == 0) {
       ++zeroed_registers;
     }
@@ -148,16 +205,76 @@ std::pair<double, int> HLL::RawEstimate() const {
   return std::make_pair(estimate, zeroed_registers);
 }
 
-double HLL::Estimate() const {
+std::pair<double, int> HLL::RawEstimateUnion(const HLL* other) const {
+  assert(register_count_ == other->register_count_);
+  assert(precision_ == other->precision_);
+
+  // Let 'm' be the number of registers.
+  const double m = static_cast<double>(register_count_);
+
+  // For each register, let 'max' be the contents of the register.
+  // Let 'term' be the reciprocal of 2 ^ max.
+  // Finally, let 'sum' be the sum of all terms.
+  double sum = 0.0;
+  int zeroed_registers = 0;
+  int i = 0;
+
+#if __AVX2__
+
+  static_assert(HLL_MAX_PRECISION < 32);
+
+  __m128i zero_counts = _mm_setzero_si128();
+  __m128i ones = _mm_set1_epi32(1);
+  __m256d ones_pd = _mm256_set1_pd(1.0);
+  __m256d sum_packed = _mm256_setzero_pd();
+  for (; i + 4 <= register_count_; i += 4) {
+    // Load 4 8-bit registers and sign-extend them to 32-bit
+    __m128i pack = _mm256_castsi256_si128(_mm256_cvtepi8_epi32(_mm_max_epi32(
+        _mm_set1_epi32(*reinterpret_cast<const uint32_t*>(&registers_[i])),
+        _mm_set1_epi32(
+            *reinterpret_cast<const uint32_t*>(&other->registers_[i])))));
+
+    // Add zero counts
+    zero_counts =
+        _mm_add_epi32(zero_counts, _mm_cmpeq_epi32(pack, _mm_setzero_si128()));
+
+    // Convert to packed doubles
+    __m256d exps_pd = _mm256_cvtepi32_pd(_mm_sllv_epi32(ones, pack));
+
+    sum_packed = _mm256_add_pd(sum_packed, _mm256_div_pd(ones_pd, exps_pd));
+  }
+
+  sum += haddall_pd(sum_packed);
+  zeroed_registers += haddall_epi32(zero_counts);
+
+#endif
+
+  for (; i < register_count_; ++i) {
+    if (registers_[i] == 0 && other->registers_[i] == 0) {
+      ++zeroed_registers;
+    }
+    const double max = std::max(static_cast<double>(registers_[i]),
+                                static_cast<double>(other->registers_[i]));
+    const double term = pow(2.0, -max);
+    sum += term;
+  }
+
+  // Next, calculate the harmonic mean
+  const double harmonic_mean = m * (1.0 / sum);
+  assert(harmonic_mean >= 0.0);
+
+  // The harmonic mean is scaled by a constant that depends on the precision.
+  const double estimate = EmpiricalAlpha(precision_) * m * harmonic_mean;
+  assert(estimate >= 0.0);
+
+  return std::make_pair(estimate, zeroed_registers);
+}
+
+double HLL::CorrectEstimate(const std::pair<double, int>& EV) const {
   // TODO(tdial): The logic below was more or less copied from the research
   // paper, less the handling of the sparse register array, which is not
   // implemented at this time. It is correct, but seems a little awkward.
   // Have someone else review this.
-
-  // First, calculate the raw estimate and number of zerod registers per
-  // original HyperLogLog. The number of zeroed registers decides whether we use
-  // LinearCounting.
-  const std::pair<double, int> EV = RawEstimate();
 
   // Determine the threshold under which we apply a bias correction.
   const double BiasThreshold = 5 * register_count_;
@@ -181,6 +298,17 @@ double HLL::Estimate() const {
   } else {
     return EP;
   }
+}
+
+double HLL::Estimate() const {
+  // Calculate the raw estimate and number of zerod registers per
+  // original HyperLogLog. The number of zeroed registers decides whether we use
+  // LinearCounting.
+  return CorrectEstimate(RawEstimate());
+}
+
+double HLL::EstimateUnion(const HLL* other) const {
+  return CorrectEstimate(RawEstimateUnion(other));
 }
 
 }  // namespace libcount

@@ -39,7 +39,7 @@ include build_config.mk
 
 AR = ar
 RANLIB = ranlib
-CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) $(WARNINGFLAGS)
+CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) $(WARNINGFLAGS) -march=native
 COUNT_OBJECTS = $(COUNT_FILES:.cc=.o)
 TESTS = empirical_data_test
 
