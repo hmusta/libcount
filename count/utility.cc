@@ -21,7 +21,7 @@ namespace libcount {
 
 uint8_t CountLeadingZeroes(uint64_t x) {
 #if (defined(__GNUC__) || defined(__clang__))
-  return __builtin_clzll(x);
+  return __builtin_clzll(x | 1);
 #else
   uint64_t y = 0;
   uint64_t n = 64;
