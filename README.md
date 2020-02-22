@@ -8,7 +8,7 @@ Cardinality Estimation Algorithm" by Heule, Nunkesser, and Hall.
 The current (alpha) implementation does not implement sparse register
 storage as described in the paper referenced above; it employs a flat
 array of 8 bit registers, and thus the storage required to calculate
-cardinality is approximately (precision ^ 2) bytes.
+cardinality is approximately (2 ^ precision) bytes.
 
 The author of the library is investigating whether there is substantial
 benefit to sparse storage for normal use cases. Since the worst case
