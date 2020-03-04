@@ -57,6 +57,74 @@ inline uint8_t ZeroCountOf(uint64_t hash, int precision) {
 
 #if __AVX2__
 
+inline __m128i cvtepi64_epi32(__m256i val) {
+  return _mm256_castsi256_si128(
+    _mm256_permutevar8x32_epi32(val, _mm256_setr_epi32(0, 2, 4, 6, 1, 3, 5, 7))
+  );
+}
+
+inline __m256i RegisterIndexOf_epi64(__m256i hashes, __m256i precision) {
+  return _mm256_srlv_epi64(hashes, _mm256_sub_epi64(_mm256_set1_epi64x(64), precision));
+}
+
+inline __m256i CountLeadingZeroes_epi64(__m256i vals) {
+  __m256i copy = _mm256_or_si256(vals, _mm256_set1_epi64x(1));
+
+#if __AVX512VL__ and __AVX512CD__
+  return _mm256_lzcnt_epi64(copy);
+#else
+  uint64_t *access = (uint64_t*)&copy;
+  access[0] = __builtin_clzll(access[0]);
+  access[1] = __builtin_clzll(access[1]);
+  access[2] = __builtin_clzll(access[2]);
+  access[3] = __builtin_clzll(access[3]);
+
+  return copy;
+#endif
+}
+
+inline __m128i ZeroCountOfPlusOne_epi64_epi32(__m256i hashes, __m256i precision) {
+  // Make a mask for isolating the leading bits used for the register index.
+  __m256i ones = _mm256_set1_epi64x(1);
+  __m256i mask = _mm256_xor_si256(_mm256_sllv_epi64(
+      _mm256_sub_epi64(_mm256_sllv_epi64(ones, precision), ones),
+      _mm256_sub_epi64(_mm256_set1_epi64x(64), precision)
+  ), _mm256_set1_epi64x(0xFFFFFFFFFFFFFFFF));
+
+  return cvtepi64_epi32(_mm256_add_epi64(
+    _mm256_sub_epi64(CountLeadingZeroes_epi64(_mm256_and_si256(hashes, mask)), precision),
+    ones
+  ));
+}
+
+inline int packlo_epi8(__m128i vals) {
+  return _mm_extract_epi32(_mm_shuffle_epi8(
+    vals, _mm_setr_epi8(0, 4, 8, 12, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+  ), 0);
+}
+
+
+inline void Update(libcount::HLL &hll, __m256i hashes, __m256i precision) {
+  // Which register will potentially receive the zero count of this hash?
+  __m256i index = RegisterIndexOf_epi64(hashes, precision);
+
+  // Count the zeroes for the hash, and add one, per the algorithm spec.
+  __m128i count = ZeroCountOfPlusOne_epi64_epi32(hashes, precision);
+  int counts_packed = packlo_epi8(count);
+  uint8_t *c = (uint8_t*)&counts_packed;
+
+  // Do this one element at a time since the indices may match
+  uint64_t *i = (uint64_t*)&index;
+  uint8_t *data[] = {
+    &hll.data()[i[0]], &hll.data()[i[1]], &hll.data()[i[2]], &hll.data()[i[3]]
+  };
+
+  *data[0] = max(*data[0], c[0]);
+  *data[1] = max(*data[1], c[1]);
+  *data[2] = max(*data[2], c[2]);
+  *data[3] = max(*data[3], c[3]);
+}
+
 inline double haddall_pd(__m256d v) {
   // [ a, b, c, d ] -> [ a+b, 0, c+d, 0]
   __m256d pairs = _mm256_hadd_pd(v, _mm256_setzero_pd());
@@ -119,8 +187,21 @@ void HLL::Update(uint64_t hash) {
 }
 
 void HLL::Update(const uint64_t* hashes, uint64_t len) {
-  // TODO: is this worth rewriting with SIMD instructions?
-  for (uint64_t i = 0; i < len; ++i) {
+  uint64_t i = 0;
+
+#if __AVX2__
+
+  __m256i precision = _mm256_set1_epi64x(precision_);
+
+  for ( ; i + 4 <= len; i += 4) {
+    ::Update(*this,
+             _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&hashes[i])),
+             precision);
+  }
+
+#endif
+
+  for ( ; i < len; ++i) {
     Update(hashes[i]);
   }
 }
